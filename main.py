@@ -102,10 +102,10 @@ fig.suptitle("Figure 1 - Class Imbalance in the Dataset", fontsize=14, fontweigh
 
 counts = df["isFraud"].value_counts().sort_index()
 labels = ["Legitimate", "Fraudulent"]
-colours = [FRAUD_PALETTE[0], FRAUD_PALETTE[1]]
+colors = [FRAUD_PALETTE[0], FRAUD_PALETTE[1]]
 
 # left -> raw counts
-axes[0].bar(labels, counts.values,  color=colours, edgecolor="white", width=0.5)
+axes[0].bar(labels, counts.values,  color=colors, edgecolor="white", width=0.5)
 axes[0].set_title("Transaction Counts (Raw)")
 axes[0].set_ylabel("Number of Transactions")
 axes[0].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
@@ -114,7 +114,7 @@ for i, v in enumerate(counts.values):
 
 # right -> percentages
 pcts = counts.values / n_total * 100
-axes[1].bar(labels, pcts, colour=colours, edgecolour="white", width=0.5)
+axes[1].bar(labels, pcts, color=colors, edgecolor="white", width=0.5)
 axes[1].set_title("Transaction Counts (Percentage of Total)")
 axes[1].set_ylabel("Percentage (%)")
 axes[1].set_ylim(0, 105)
@@ -130,7 +130,7 @@ save_fig("fig1_class_imbalance.png")
 cap = df["amount"].quantile(0.99)
 df_capped = df[df["amount"] <= cap].copy()
 
-fig, axes = plt.subplot(1, 2, figsize=(14, 5))
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 fig.suptitle("Figure 2 - Transaction Amount Distribution: Fraud vs Legit", fontsize=14, fontweight="bold")
 
 #left -> overlapping Kernel Density Estimate on the log scale - shows the differences in shape
@@ -140,7 +140,7 @@ for label, subset in df_capped.groupby("isFraud"):
         np.log1p(amounts), #to handle the transaction that are 0
         bins=80,
         alpha=0.55,
-        colour=FRAUD_PALETTE[label],
+        color=FRAUD_PALETTE[label],
         label="Fraudulent" if label == 1 else "Legitimate",
         density=True
     )
@@ -155,7 +155,7 @@ plot_data["Class"] = plot_data["isFraud"].map({0: "Legitimate", 1: "Fraudulemt"}
 sns.boxplot(
     data=plot_data,
     x="Class", y="amount",
-    palette=FRAUD_PALETTE,
+    palette={"Legitimate" : FRAUD_PALETTE[0], "Fraudulent" : FRAUD_PALETTE[1]},
     ax=axes[1],
     width=0.4,
     showfliers=False # anything that is an outlier is not included for readability purposes
@@ -166,3 +166,33 @@ axes[1].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:, .0f
 
 plt.tight_layout()
 save_fig("fig2_amount_distribution.png")
+
+""" FIG 3 - FRAUD BY TRANSACTION TYPE (in PaySim, fraud only occurs in TRANSFER and CASH_OUT -> needed for feature engineering)"""
+
+type_fraud = df.groupby("type")["isFraud"].agg(["sum", "count"])
+type_fraud["fraud_rate"] = type_fraud["sum"] / type_fraud["count"] * 100
+type_fraud = type_fraud.sort_values("fraud_rate", ascending=False)
+
+fig, axes = plt.subplots(1,2, figsize=(14, 5))
+fig.suptitle("Figure 3 - Fraud Concentration By Transaction Type", fontsize=14, fontweight="bold")
+
+#left: raw fraud count per type
+axes[0].bar(type_fraud.index, type_fraud["sum"], color="#D65F5F", edgecolor="white")
+axes[0].set_title("Number of Fraudulent Transactions by Type")
+axes[0].set_xlabel("Transaction Type")
+axes[0].set_ylabel("Fraud Count")
+for i, (idx, row) in enumerate(type_fraud.iterrows()):
+    axes[0].text(i, row["sum"] + 50, f"{int(row['sum']):,}", ha="center", fontsize=9)
+
+#right: fraud rate per type 
+axes[1].bar(type_fraud.index, type_fraud["fraud_rate"], color="#D65F5F", edgecolor="white")
+axes[1].set_xlabel("Transaction Type")
+axes[1].set_ylabel("Fraud Rate (%)")
+for i, (idx, row) in enumerate(type_fraud.iterrows()):
+    if row["fraud_rate"] > 0:
+        axes[1].text(i, row["fraud_rate"] + 0.05, f"{row['fraud_rate']:.2f}%", ha="center", fontsize=9)
+
+plt .tight_layout()
+save_fig("fig3_fraud_by_type.png")
+
+print("\nAll Phase 1 figures saved to /figures")
