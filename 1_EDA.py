@@ -151,7 +151,7 @@ axes[0].legend()
 
 #right -> box plot shows median and spread per class more obviously
 plot_data = df_capped[["amount", "isFraud"]].copy()
-plot_data["Class"] = plot_data["isFraud"].map({0: "Legitimate", 1: "Fraudulemt"})
+plot_data["Class"] = plot_data["isFraud"].map({0: "Legitimate", 1: "Fraudulent"})
 sns.boxplot(
     data=plot_data,
     x="Class", y="amount",
@@ -162,7 +162,7 @@ sns.boxplot(
 )
 axes[1].set_title("Amount Distribution by Class \n (outliers are excluded, capped at 99th percentile)")
 axes[1].set_ylabel("Transaction Amount")
-axes[1].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:, .0f}"))
+axes[1].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
 
 plt.tight_layout()
 save_fig("fig2_amount_distribution.png")
@@ -237,8 +237,8 @@ sns.scatterplot(
     data=sample,
     x="oldbalanceOrg",
     y="newbalanceOrig",
-    hue="isFraud".,
-    paletter=FRAUD_PALETTE,
+    hue="isFraud",
+    palette=FRAUD_PALETTE,
     alpha=0.4
 )
 
