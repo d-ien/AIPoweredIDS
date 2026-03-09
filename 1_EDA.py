@@ -195,4 +195,57 @@ for i, (idx, row) in enumerate(type_fraud.iterrows()):
 plt .tight_layout()
 save_fig("fig3_fraud_by_type.png")
 
+""" FIG 4 - Fraud rate over time"""
+
+time_fraud = df.groupby("step")["isFraud"].mean() * 100
+
+plt.figure(figsize=(10,5))
+plt.plot(time_fraud.index, time_fraud.values, color="#D65F5F")
+
+plt.title("Fraud Rate Over Time")
+plt.xlabel("Time Step")
+plt.ylabel("Fraud Rate (%)")
+
+save_fig("fig4_fraud_over_time.png")
+
+""" FIG 5 - CORRELATION HEATMAP"""
+
+numeric_df = df.select_dtypes(include=[np.number])
+
+plt.figure(figsize=(12,8))
+
+sns.heatmap(
+    numeric_df.corr(),
+    cmap="coolwarm",
+    center=0,
+    square=True,
+    cbar_kws={"shrink": .8}
+)
+
+plt.title("Feature Correlation Heatmap")
+
+save_fig("fig5_correlation_heatmap.png")
+
+
+"""FIG 6 - BALANCE BEHAVIOUR FRAUD VS LEGIT"""
+
+sample = df.sample(5000, random_state=42)
+
+plt.figure(figsize=(8,6))
+
+sns.scatterplot(
+    data=sample,
+    x="oldbalanceOrg",
+    y="newbalanceOrig",
+    hue="isFraud".,
+    paletter=FRAUD_PALETTE,
+    alpha=0.4
+)
+
+plt.title("Figure 6 - Account Balance changes for Fraud vs Legitimate Transactions")
+plt.xlabel("Old Balance (Origin Account)")
+plt.ylabel("New Balance (Origin Account)")
+
+save_fig("fig6_balance_behaviour.png")
+
 print("\nAll Phase 1 figures saved to /figures")
