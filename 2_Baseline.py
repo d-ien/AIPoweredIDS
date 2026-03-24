@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import (classification_report, confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score)
+from sklearn.metrics import (classification_report, confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score, f1_score, precision_score, recall_score)
 
 #keep the styling consistent with the EDA file
 sns.set_theme(style="whitegrid", palette="muted")
@@ -137,7 +137,7 @@ for ax, data, fmt, title in zip(
     ["Raw Counts", "Row-Normalised (%)"]
 ):
     sns.heatmap(
-        data, annot-True, fmt=fmt, cmap="Blues", ax=ax,
+        data, annot=True, fmt=fmt, cmap="Blues", ax=ax,
         xticklabels=["Pred: Legit", "Pred: Fraud"],
         yticklabels=["Actual: Legit", "Actual: Fraud"],
         cbar=False
@@ -150,3 +150,74 @@ for ax, data, fmt, title in zip(
 plt.tight_layout()
 save_fig("fig7_confusion_matric_lr.png")
 
+#FIGURE 8 - ROC CURVE
+# diagonal = random classifier and the curve should be above it
+#ROC-AUC is the number i will compare across all the 3 models
+
+fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+
+plt.figure(figsize=(8,6))
+plt.plot(fpr, tpr, color="#D65F5F", lw=2, label=f"logistic Regression (AUC = {roc_auc:.4f})")
+plt.plot([0,1], [0,1], "k--", lw=1.5, label="Random Classifier")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positve Rate (Recall)")
+plt.title("Figure 8 - ROC Curve: Logistic Regression Baseline")
+plt.legend(loc="lower right")
+plt.tight_layout()
+save_fig("Fig8_roc_curve_lr.png")
+
+#FIGURE 9 - PRECISION RECALL CURVE
+# more informative that ROC for imbalanced datasets
+# high ROC-AUC can still have bad precision on fraud -> so in method argue why PR-AUC is the actual metric that matters here
+
+precision, recall, thresholds = precision_recall_curve(y_test, y_pred_prob)
+
+plt.figure(figsize=(8, 6))
+plt.plot(recall, precision, color="#D65F5F", lw=2, label=f"Logistic Regression (AP = {avg_prc:.4f})")
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Figure 9 - Precision Recall Curve: Logistic Regression Baseline")
+plt.legend(loc="upper right")
+plt.tight_layout()
+save_fig("fig9_pr_curve_lr.png")
+
+#FIGURE 10 - FEATURE COEFFICIENTS 
+#shows which features dirve the logistic regression decison -> use to justify feature enginneering choices
+
+coef_df = pd.DataFrame({
+    "feature" : FEATURES,
+    "coefficient" : lr.coef_[0]
+}).sort_values("coefficient", key=abs, ascending=True)
+
+colors_coef = ["#D65F5F" if c > 0 else "#4878CF" for c in coef_df["coefficient"]]
+
+plt.figure(figsize=(10,6))
+plt.barh(coef_df["feature"], coef_df["coefficient"], color=colors_coef)
+plt.axvline(x=0, color="black", linewidth=0.8)
+plt.xlabel("Coefficient Value")
+plt.title("Figure 1- - Logistic Regression Feature Coefficients\n"
+         "(red = pushes towards fraud, blue = pushes towards legitimate)" )
+plt.tight_layout()
+save_fig("fig10_lr_coefficients.png")
+
+print("\nAll Phase 2 figures saved to /figures")
+print("Complete baseline results section.")
+
+os.makedirs("metrics", exist_ok=True)
+
+metrics = {
+    "model" : "Logistic Regression",
+    "precision" : round(precision_score(y_test, y_pred), 4),
+    "recall" : round(recall_score(y_test, y_pred), 4),
+    "f1" : round(f1_score(y_test, y_pred), 4),
+    "roc_auc" : round(roc_auc, 4),
+    "pr_auc" : round(avg_prc, 4)
+}
+
+pd.DataFrame([metrics]).to_csv("metrics/baseline_lr.csv", index=False)
+print("\n ✓ Metrics saved → metrics/baseline_lr.csv ")
+print(f"Precision : {metrics['precision']}")
+print(f"Recall    : {metrics['recall']}")
+print(f"F1 Score  : {metrics['f1']}")
+print(f"ROC-AUC   : {metrics['roc_auc']}")
+print(f"PR-AUC    : {metrics['pr_auc']}")
