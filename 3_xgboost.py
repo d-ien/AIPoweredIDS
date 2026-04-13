@@ -150,9 +150,9 @@ best_threshold = thresholds[best_threshold_idx]
 best_f1 = f1_scores[best_threshold_idx]
 
 print(f"\n Defaul threshold (0.5) F1 : "
-      F"{f1_score(y_test, (y_pred_prob > 0.5).astype(int)):.4f}")
+      f"{f1_score(y_test, (y_pred_prob > 0.5).astype(int)):.4f}")
 print(f" Optimal Threshold : {best_threshold:.4f}")
-print(f"Optimal Threshold F1 : {best_f1:.4f}")
+print(f" Optimal Threshold F1 : {best_f1:.4f}")
 
 #apply the tuned threshold for all downstream evaluation
 y_pred_tuned = (y_pred_prob >= best_threshold).astype(int)
