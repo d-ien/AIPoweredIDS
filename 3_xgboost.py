@@ -59,7 +59,7 @@ y = df_filtered[TARGET]
 
 # stratified split preserves the fraud ratio in both sets
 # for METHOD -> stratification is essential with imbalanced data..... without it random chance could put most fraud cases in one split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test=0.2, random_state=42, stratify=y)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
 #XGBoost with tree bases splits is not sensitive to feature scaling the same way logistic regression is so scaling is not required (necessarilty) -> method
 #apply it anyways to keep the pipeline consistent and bc it has no -ve effect on tree models
@@ -114,11 +114,11 @@ model = xgb.XGBClassifier(
 
 model.fit(
     X_train_scaled, y_train,
-    eval_set=[(X_test_scaled, y_test)]
+    eval_set=[(X_test_scaled, y_test)],
     verbose=False
 )
 
-best_iter = model.best_interaction
+best_iter = model.best_interation
 print(f" Best Interaction (early stopping): {best_iter}")
 
 y_pred_prob = model.predict_proba(X_test_scaled)[:,1]
@@ -128,6 +128,9 @@ classifiers predict fraud is probablilty > 0.5 by default
 for imbalance fraud detection this default is almost always wrong -> will miss too many fraud cases so low recall
 
 methodology - tune the threshold by maximising the F1 score across all the possible thresholds on the test set -> trade off
+-> could be data leakage -> using the test set to make modelling decisions -> mention in methodology that Threshold tuning 
+was performed on the test set, which may introduce optimistic bias"
+
 - lowering the threshold -> catches more fraud (higher recall)
                         -> flags more legit transactions (lower precision)
 - rasing the threshold -> lower false positives
@@ -173,7 +176,7 @@ print("=" * 50)
 show both thresholds -> point out reduced falsed negatives
 when moving from 0.5 to tuned thresholds and the related trade off in false positives"""
 
-y_pred_default = (y_pred_prob >= 0.5).astyoe(int)
+y_pred_default = (y_pred_prob >= 0.5).astype(int)
 cm_default = confusion_matrix(y_test, y_pred_default)
 cm_tuned = confusion_matrix(y_test, y_pred_tuned)
 
@@ -215,7 +218,7 @@ plt.plot(fpr, tpr, color="#D65F5F", lw=2,
 if os.path.exists(lr_metrics_path):
     lr_metrics = pd.read_csv(lr_metrics_path)
     lr_auc = lr_metrics["roc_auc"].values[0]
-    plt.plot([], [], colot="#4878cf", lw=2, label =f"Logistic Regression (AUC = {lr_auc:.4f})")
+    plt.plot([], [], color="#4878cf", lw=2, label =f"Logistic Regression (AUC = {lr_auc:.4f})")
 
 plt.plot([0,1], [0,1], "k--", lw=1.5, label="Random Classifier")
 plt.xlabel("False Positive Rate")
@@ -233,7 +236,7 @@ The PR curve is the primary eval tool for imbalance classification. A model can 
 produces many false positive on the minority class. Davis & Goadrich (2006) "The relationship between precision recall and ROC curvers" """
 
 plt.figure(figsize = (8,6))
-plt.plot(recall_vals, precision_vals, color="#D65F5F", lw=2, lavel=f"XGBoost (AP = {avg_prc:.4f})")
+plt.plot(recall_vals, precision_vals, color="#D65F5F", lw=2, label=f"XGBoost (AP = {avg_prc:.4f})")
 plt.scatter(
     recall_vals[best_threshold_idx],
     precision_vals[best_threshold_idx],
@@ -315,11 +318,11 @@ print(f"\n False Positives: {len(false_positives):,} "
       f"({len(false_positives)/len(test_df['y_true']==0)*100:.2f}% of legit transactions)")
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-fig.suptitle("Figure 16 - False Positve Analysis: What Legitimate Transactions Get Flagged?", fontisize=12, fontweight="bold")
+fig.suptitle("Figure 16 - False Positve Analysis: What Legitimate Transactions Get Flagged?", fontsize=12, fontweight="bold")
 
 # Left: amount distribution of FP vs correctly classified legit
 cap = test_df["amount"].quantile(0.99)
-axes[0].hist(np.log1p(true_negatives[true_negatives["amount"] <= cap]["amountz"]),
+axes[0].hist(np.log1p(true_negatives[true_negatives["amount"] <= cap]["amount"]),
              bins=60, alpha=0.6, color="#4878CF", density=True, label="True Negatives")
 axes[0].hist(np.log1p(false_positives[false_positives["amount"] <= cap]["amount"]),
              bins=60, alpha=0.6, color="#D65F5F", density=True, label="False Positives")
