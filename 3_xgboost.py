@@ -118,7 +118,7 @@ model.fit(
     verbose=False
 )
 
-best_iter = model.best_interation
+best_iter = model.best_iteration
 print(f" Best Interaction (early stopping): {best_iter}")
 
 y_pred_prob = model.predict_proba(X_test_scaled)[:,1]
@@ -167,7 +167,7 @@ print(" XGBOOST RESULTS (tuned threshold)")
 print("=" * 55)
 print(classification_report(y_test, y_pred_tuned, target_names=["Legitimate", "Fraud"]))
 print(f" ROC-AUC  :  {roc_auc:.4f}")
-print(f". PR-AUC. : (avg_prc:.4f)")
+print(f". PR-AUC. : {avg_prc:.4f}")
 print(f". Threshold: {best_threshold:.4f}")
 print("=" * 50)
 
@@ -312,7 +312,7 @@ test_df["y_pred"] = y_pred_tuned
 test_df["fraud_prob"] = y_pred_prob
 
 false_positives = test_df[(test_df["y_true"] == 0) & (test_df["y_pred"] == 1)]
-true_negatives = test_df[(test_df["y_true" == 0]) & (test_df["y_pred"] == 0)]
+true_negatives = test_df[(test_df["y_true"] == 0) & (test_df["y_pred"] == 0)]
 
 print(f"\n False Positives: {len(false_positives):,} "
       f"({len(false_positives)/len(test_df['y_true']==0)*100:.2f}% of legit transactions)")
@@ -368,4 +368,4 @@ print(f"  PR-AUC    : {metrics['pr_auc']}")
 print(f"  Threshold : {metrics['threshold']}")
 
 print("\nAll Phase 3 Figures saved to /figures")
-print("Paste your metrics output here to frame the XGBoost vs baseline comparison.")
+print("Paste metrics output here to frame the XGBoost vs baseline comparison.")
