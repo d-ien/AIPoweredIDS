@@ -149,7 +149,7 @@ best_threshold_idx = f1_scores.argmax()
 best_threshold = thresholds[best_threshold_idx]
 best_f1 = f1_scores[best_threshold_idx]
 
-print(f"\n Defaul threshold (0.5) F1 : "
+print(f"\n Default threshold (0.5) F1 : "
       f"{f1_score(y_test, (y_pred_prob > 0.5).astype(int)):.4f}")
 print(f" Optimal Threshold : {best_threshold:.4f}")
 print(f" Optimal Threshold F1 : {best_f1:.4f}")
