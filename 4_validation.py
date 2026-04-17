@@ -17,7 +17,7 @@ from sklearn.metrics import ( classification_report, confusion_matrix, roc_auc_s
 sns.set_theme(style="whitegrid", palette="muted")
 FRAUD_PALETTE = {0: "#4878CF", 1: "#D65F5F"}
 FIG_DIR = "figures"
-os.makedirs(FIG_DIR, exist_ok=True)
+os.makedirs(FIG_DIR, e  xist_ok=True)
 os.makedirs("metrics", exist_ok = True)
 
 def save_fig(name):
