@@ -1,13 +1,285 @@
-import kagglehub
 import os
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import seaborn as sns
+import warnings
+import kagglehub
+warnings.filterwarnings('ignore')
 
-path = kagglehub.dataset_download("pavan1512/ieee-cis-fraud-detection")
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import ( classification_report, confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score, f1_score, precision_score, recall_score)
+
+#styling
+sns.set_theme(style="whitegrid", palette="muted")
+FRAUD_PALETTE = {0: "#4878CF", 1: "#D65F5F"}
+FIG_DIR = "figures"
+os.makedirs(FIG_DIR, exist_ok=True)
+os.makedirs("metrics", exist_ok = True)
+
+def save_fig(name):
+    plt.savefig(os.path.join(FIG_DIR, name), dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"  saved -> figures/{name}")
+
+"""LOAD DATA"""
+print("Loading dataset...")
+path = kagglehub.dataset_download("arunavakrchakraborty/financial-payment-services-fraud-data")
 csv_files = [f for f in os.listdir(path) if f.endswith('.csv')]
-print(f"Files: {csv_files}")
+df = pd.read_csv(os.path.join(path, csv_files[0]))
+print(f" Loaded: {df.shape[0]:,} rows")
 
-df_paysim = pd.read_csv(os.path.join(path, csv_files[0]))
-print(f"Shape: {df_paysim.shape}")
-print(f"Columns: {df_paysim.columns.tolist()}")
-print(df_paysim.head(3))
-print(df_paysim["isFraud"].value_counts())
+""" PREPROCESSING - identical to baseline and xgboost
+
+for methodolofy -> precprocessing pipeline is constant throughout the project. Any changes would disregard the compariosn
+so would not be possible to link perfomance differences to the model or validation strategy instead of data prep.
+*** important principle of controlled experimental design***"""
+
+df_filtered = df[df["type"].isin(["TRANSFER", "CASH_OUT"])].copy()
+
+df_filtered["orig_balance_delta"] = (df_filtered["newbalanceOrig"] - df_filtered["oldbalanceOrg"])
+df_filtered["dest_balance_delta"] = (df_filtered["newbalanceDest"] - df_filtered["oldbalanceDest"])
+
+df_filtered["orig_drained"] = (df_filtered["newbalanceOrig"] == 0).astype(int)
+df_filtered["type_encoded"] = (df_filtered["type"] == "TRANSFER").astype(int)
+
+FEATURES = [
+    "step", "amount",
+    "oldbalanceOrg", "newbalanceOrig"
+    "oldbalanceDest", "newbalanceDest",
+    "orig_balance_delta", "dest_balance_delta",
+    "orig_drained", "type_encoded"
+]
+TARGET = "isFraud"
+
+"""TEMPORAL SPLIT - checkss validity"""
+SPLIT_STEP = 600 # 80/20 split
+
+train_df = df_filtered[df_filtered["step"] <= SPLIT_STEP].copy()
+test_df = df_filtered[df_filtered["step"] > SPLIT_STEP].copy()
+
+# no shuffling
+X_train = train_df[FEATURES]
+y_train = train_df[TARGET]
+X_test = test_df[FEATURES]
+y_test = test_df[TARGET]
+
+print(f"\n Temporal split at step {SPLIT_STEP}")
+print(f" Train: steps 1-{SPLIT_STEP} -> {len(X_train):,} rows | "
+      f"fraud rate: {y_test.mean()*100:.4f}%")
+print(f" Test: steps {SPLIT_STEP+1}-743 -> {len(X_test):,} rows | "
+      f"fraud rate: {y_test.mean()*100:.4f}%")
+print(f"\n Fraud counts:")
+print(f"    Train fraud: {y_train.sum():,}")
+print(f"    Test fraud: {y_test.sum():,}")
+
+"""SCALE - training on partition only
+
+method - scalar fit on training partition -> putting it on one full datatset before splitting = data leakage
+-> the model would have indirect knowledge of the statistic properties for future transactions -> error in fraud detection"""
+
+scalar = StandardScaler()
+X_train_scaled = scalar.fit_transform(X_train)
+X_train_scaled = scalar.transform(X_test) #not fit
+
+""" TRAIN XGBOOST ON TEMPORAL TRAINING PARTITION 
+- identical to phase 3 
+method - keep hyperparameters fixed, tuning hyperparameters on the temporal tests would be optimising for the future not possible in deployment
+hyperparameters in phase 3 are locked and move forward the same"""
+
+neg = (y_train == 0).sum()
+pos = (y_train == 1).sum()
+scale_pos_weight = neg / pos
+
+print(f"\n scale_pos_weight: {scale_pos_weight:.2f}")
+print("\nTraining XGBoost on temporal training partition...")
+
+model = xgb.XGBClassifier(
+    n_estimators=500,
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    scale_pos_weight=scale_pos_weight,
+    eval_metric="aucpr",
+    early_stopping_rounds=20,
+    random_state=42,
+    n_jobs=-1,
+    verbosity=0
+)
+
+# validation is set for early stopping from only the training partition 
+#method - this is set to determine when to stop training. taken from the training partition
+# steps 1-600 (no future info) -> not in the test set
+X_tr, X_val, y_tr, y_val = train_test_split(
+    X_train_scaled, y_train,
+    test_size=0.1,
+    random_state=42,
+    stratify=y_train # safe bc within the training partiticiton
+)
+
+model.fit(
+    X_tr, y_tr,
+    eval_set=[(X_val, y_val)],
+    verbose=False
+)
+print(f" Best iteration: {model.best_iteration}")
+
+""" THRESHOLD - locked from phase 3"""
+
+xgb_metrics_path = "metrics/xgboost.csv"
+
+if not os.path.exists(xgb_metrics_path):
+    raise FileNotFoundError(
+        "metrics/xgboost.csv not found."
+        "Run 3_xgboost.py before this file -"
+        "the threshold must come from Phase 3, not be re-derived here."
+    )
+
+locked_threshold = pd.read_csv(xgb_metrics_path)["threshold"].values[0]
+print(f"\n Locked threshold (from Phase 3): {locked_threshold:.4f}")
+print(f" This value is NOT re-tuned on temporal test data.")
+
+y_pred_prob = model.predict_proba(X_train_scaled)[:, 1]
+y_pred_tuned = (y_pred_prob >= locked_threshold).astype(int)
+
+"""EVALUATION"""
+roc_auc = roc_auc_score(y_test, y_pred_prob)
+avg_prc = average_precision_score(y_test, y_pred_prob)
+prec = precision_score(y_test, y_pred_tuned)
+ree = recall_score(y_test, y_pred_tuned)
+f1 = f1_score(y_test, y_pred_tuned)
+
+print("\n" + "=" * 55)
+print("TEMPORAL VALIDATION RESULTS")
+print("=" * 55)
+print(classification_report(y_test, y_pred_tuned, target_names=["Legitimate", "Fraud"]))
+print(f" ROC-AUC : {roc_auc:.4f}")
+print(f" PR-AUC : {avg_prc:.4f}")
+print(f" Threshold: {locked_threshold:.4f} (locked from Phase 3)")
+print("=" * 55)
+
+#load phase 3 random split metrics for comparison
+phase3 = pd.read_csv(xgb_metrics_path).iloc[0]
+print("\n COMPARISON: Random SPlit (Phase 3) vs Temporal Split (Phase 4)")
+print(f" {'Metric':<12} {'Phase 3: >10'} {'Phase 4':>10} {'Delta': 10}")
+print(f" {'-'*44}")
+
+for metric, val in [("Precision", prec), ("Recall", rec),
+                     ("F1", f1), ("ROC-AUC", roc_auc), ("PR-AUC", avg_prc)]:
+    key = metric.lower().replace("-", "_").replace("roc_auc", "roc_auc").replace("pr_auc", "pr_auc")
+    p3val = phase3[key] if key in phase3 else float("nan")
+    delta = val - p3valdirection = "▼" if delta < 0 else "▲"
+    print(f" {metric:<12} {p3val:>10.4f} {val:>10.4f} {direction}{abs(delta):>8.4f}")
+
+
+"""fig 17 - confusion matrix:temporal test set
+- compare against figure 11 (random split)
+- false negs
+- concept drift """
+
+cm = confusion_matrix(y_test, y_pred_tuned)
+
+fig, axes = plt.subplots(1,2, figsize=(14,5))
+fig.suptitle("Figure 17 - Temporal Validation: Confusion Matrix",
+fontsize=13, fontweight="bold")
+
+cm_pct = cm.astype(float) / cm.sum(axis=1, keepdims=True) * 100
+for ax, data, fmt, title in zip(
+    axes,
+    [cm, cm_pct],
+    ["d", ".1f"],
+    ["Raw Counts", "Row-Normalised (%)"]
+):
+    sns.heatmap(
+        data, annot=True, fmt=fmt, cmpa="Blues", ax=ax,
+        xticklabels=["Pred: Legit", "Pred: Fraud"],
+        yticklabels=["Actual: Legit", "Actual: Fraud"],
+        cbar=False
+    )
+    ax.set_title(title)
+    ax.set_ylabel("Actual")
+    ax.set_xlabel("Predicted")
+
+plt.tight_layout()
+save_fig("fig17_confusion_matrix_temporal.png")
+
+"""FIG 18 - FRAUD RATE ACROSS THE TIME STEPS 
+shows if fraud patterns are the same across time."""
+
+step_fraud = df_filtered.groupby("step")["isFraud"].mean() * 100
+
+plt.figure(figsize=(12, 5))
+plt.plot(step_fraud.index, step_fraud.values, color="#D65F5F", lw=1.5, alpha=0.8)
+plt.axvline(x=SPLIT_STEP, color="black", linestyle="--", lw=2, label=f"Train/test split (step {SPLIT_STEP})")
+plt.fill_betweenx([0, step_fraud.max() * 1.2],
+                  0, SPLIT_STEP, alpha=0.07, color="#4878CF", label="Training region")
+plt.xlabel("Time Step")
+plt.ylabel("Fraud Rate (%)")
+plt.title("Figure 18 - Fraud Rate Across Time Steps \n"
+          "(non-stationarity justifies temporal over random splitting)")
+plt.legend()
+plt.tight_layout()
+save_fig("fig18_fraud_rate_over_time.png")
+
+"""FIGURE 19 - ROC Curve: Temporal vs Random Split -> visual represenatative"""
+
+fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+
+plt.figure(figsize=(8,6))
+plt.plot(fpr, tpr, color="#D65F5F", lw=2, label=f"Temporal SPlit (AUC = {roc_auc:.4f})")
+
+phase3_auc = phase3["roc_auc"] if "roc_auc" in phase3 else None
+if phase3_auc:
+    plt.plot([], [], color="#4878CF", lw=2,
+    label=f"Random Split - Phase 3 (AUC = {phase3_auc:.4f})")
+
+plt.plot([0,1], [0,1], "k--", lw=1.5, label="Random Classifier")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate (Recall)")
+plt.title("Figure 19 - ROC Curve: Temporal Split vs Random Split")
+plt.legend(loc="lower right")
+plt.tight_layout()
+save_fig("fig19_roc_temporal_vs_random.png")
+
+"""FIGURE 20 - Precision Recall Curve: Temporal vs Random Split"""
+precision_vals, recall_vals, _ = precision_recall_curve(y_test, y_pred_prob)
+
+plt.figure(figsize=(8,6))
+plt.plot(recall_vals, precision_vals, color="#D65F6F", lw=2,
+         label=f"Temporal SPlit (AP = {avg_prc:.4f})")
+
+phase3_prauc = phase3["pr_auc"] if "pr_auc" in phase3 else None
+if phase3_prauc:
+    plt.plot([], [], color="#4878CF", lw=2,
+    label=f"Random Split - Phase 3 (AP = {phase3_prauc:.4f})")
+
+plt.axhline(y=y_test.mean(), color="k", linestyle="--", lw=1.5,
+            label=f"Random baseline ({y_test.mean():.4f})")
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Figure 20 - Precision-Recall Curve: Temporal Split vs Random Split")
+plt.legend(loc="upper right")
+plt.tight_layout()
+save_fig("fig20_pr_temporal_vs_random.png")
+
+# save the metrics
+metrics = {
+    "model": "XGBoost (Temporal Split)",
+    "precision": round(prec, 4),
+    "recall" : round(rec, 4),
+    "f1" : round(f1, 4),
+    "roc_auc" : round(roc_auc, 4),
+    "pr_auc" : round(avg_prc, 4),
+    "threshold" : round(locked_threshold, 4),
+    "split_type" : "temporal",
+    "split_step" : SPLIT_STEP
+}
+
+pd.DataFrame([metrics]).to_csv("metrics/xgboost_temporal.csv", index=False)
+print(f"\n Metrics saved -> metrics/xgboost_temporal.csv")
+print(f"\nAll Phase 4 figures saved to /figures")
+print(f"Paste the comparison table output here before writing your robustness section.")
