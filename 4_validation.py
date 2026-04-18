@@ -17,7 +17,7 @@ from sklearn.metrics import ( classification_report, confusion_matrix, roc_auc_s
 sns.set_theme(style="whitegrid", palette="muted")
 FRAUD_PALETTE = {0: "#4878CF", 1: "#D65F5F"}
 FIG_DIR = "figures"
-os.makedirs(FIG_DIR, e  xist_ok=True)
+os.makedirs(FIG_DIR, exist_ok=True)
 os.makedirs("metrics", exist_ok = True)
 
 def save_fig(name):
@@ -32,11 +32,7 @@ csv_files = [f for f in os.listdir(path) if f.endswith('.csv')]
 df = pd.read_csv(os.path.join(path, csv_files[0]))
 print(f" Loaded: {df.shape[0]:,} rows")
 
-""" PREPROCESSING - identical to baseline and xgboost
-
-for methodolofy -> precprocessing pipeline is constant throughout the project. Any changes would disregard the compariosn
-so would not be possible to link perfomance differences to the model or validation strategy instead of data prep.
-*** important principle of controlled experimental design***"""
+""" PREPROCESSING - identical to baseline and xgboost """
 
 df_filtered = df[df["type"].isin(["TRANSFER", "CASH_OUT"])].copy()
 
@@ -48,7 +44,7 @@ df_filtered["type_encoded"] = (df_filtered["type"] == "TRANSFER").astype(int)
 
 FEATURES = [
     "step", "amount",
-    "oldbalanceOrg", "newbalanceOrig"
+    "oldbalanceOrg", "newbalanceOrig",
     "oldbalanceDest", "newbalanceDest",
     "orig_balance_delta", "dest_balance_delta",
     "orig_drained", "type_encoded"
@@ -56,7 +52,9 @@ FEATURES = [
 TARGET = "isFraud"
 
 """TEMPORAL SPLIT - checkss validity"""
-SPLIT_STEP = 600 # 80/20 split
+#SPLIT_STEP = 600 # 80/20 split
+SPLIT_STEP = int(df_filtered["step"].quantile(0.8)) # 80th percentile split instead of hardcoded
+print(f" Split Step (80th percentile): {SPLIT_STEP}")
 
 train_df = df_filtered[df_filtered["step"] <= SPLIT_STEP].copy()
 test_df = df_filtered[df_filtered["step"] > SPLIT_STEP].copy()
@@ -69,7 +67,7 @@ y_test = test_df[TARGET]
 
 print(f"\n Temporal split at step {SPLIT_STEP}")
 print(f" Train: steps 1-{SPLIT_STEP} -> {len(X_train):,} rows | "
-      f"fraud rate: {y_test.mean()*100:.4f}%")
+      f"fraud rate: {y_train.mean()*100:.4f}%")
 print(f" Test: steps {SPLIT_STEP+1}-743 -> {len(X_test):,} rows | "
       f"fraud rate: {y_test.mean()*100:.4f}%")
 print(f"\n Fraud counts:")
@@ -81,9 +79,9 @@ print(f"    Test fraud: {y_test.sum():,}")
 method - scalar fit on training partition -> putting it on one full datatset before splitting = data leakage
 -> the model would have indirect knowledge of the statistic properties for future transactions -> error in fraud detection"""
 
-scalar = StandardScaler()
-X_train_scaled = scalar.fit_transform(X_train)
-X_train_scaled = scalar.transform(X_test) #not fit
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test) #not fit
 
 """ TRAIN XGBOOST ON TEMPORAL TRAINING PARTITION 
 - identical to phase 3 
@@ -143,14 +141,14 @@ locked_threshold = pd.read_csv(xgb_metrics_path)["threshold"].values[0]
 print(f"\n Locked threshold (from Phase 3): {locked_threshold:.4f}")
 print(f" This value is NOT re-tuned on temporal test data.")
 
-y_pred_prob = model.predict_proba(X_train_scaled)[:, 1]
+y_pred_prob = model.predict_proba(X_test_scaled)[:, 1]
 y_pred_tuned = (y_pred_prob >= locked_threshold).astype(int)
 
 """EVALUATION"""
 roc_auc = roc_auc_score(y_test, y_pred_prob)
 avg_prc = average_precision_score(y_test, y_pred_prob)
 prec = precision_score(y_test, y_pred_tuned)
-ree = recall_score(y_test, y_pred_tuned)
+rec = recall_score(y_test, y_pred_tuned)
 f1 = f1_score(y_test, y_pred_tuned)
 
 print("\n" + "=" * 55)
@@ -165,14 +163,15 @@ print("=" * 55)
 #load phase 3 random split metrics for comparison
 phase3 = pd.read_csv(xgb_metrics_path).iloc[0]
 print("\n COMPARISON: Random SPlit (Phase 3) vs Temporal Split (Phase 4)")
-print(f" {'Metric':<12} {'Phase 3: >10'} {'Phase 4':>10} {'Delta': 10}")
+print(f" {'Metric':<12} {'Phase 3': >10} {'Phase 4':>10} {'Delta': 10}")
 print(f" {'-'*44}")
 
 for metric, val in [("Precision", prec), ("Recall", rec),
                      ("F1", f1), ("ROC-AUC", roc_auc), ("PR-AUC", avg_prc)]:
     key = metric.lower().replace("-", "_").replace("roc_auc", "roc_auc").replace("pr_auc", "pr_auc")
     p3val = phase3[key] if key in phase3 else float("nan")
-    delta = val - p3valdirection = "▼" if delta < 0 else "▲"
+    delta = val - p3val 
+    direction = "▼" if delta < 0 else "▲"
     print(f" {metric:<12} {p3val:>10.4f} {val:>10.4f} {direction}{abs(delta):>8.4f}")
 
 
@@ -195,7 +194,7 @@ for ax, data, fmt, title in zip(
     ["Raw Counts", "Row-Normalised (%)"]
 ):
     sns.heatmap(
-        data, annot=True, fmt=fmt, cmpa="Blues", ax=ax,
+        data, annot=True, fmt=fmt, cmap="Blues", ax=ax,
         xticklabels=["Pred: Legit", "Pred: Fraud"],
         yticklabels=["Actual: Legit", "Actual: Fraud"],
         cbar=False
@@ -249,7 +248,7 @@ save_fig("fig19_roc_temporal_vs_random.png")
 precision_vals, recall_vals, _ = precision_recall_curve(y_test, y_pred_prob)
 
 plt.figure(figsize=(8,6))
-plt.plot(recall_vals, precision_vals, color="#D65F6F", lw=2,
+plt.plot(recall_vals, precision_vals, color="#D65F5F", lw=2,
          label=f"Temporal SPlit (AP = {avg_prc:.4f})")
 
 phase3_prauc = phase3["pr_auc"] if "pr_auc" in phase3 else None
