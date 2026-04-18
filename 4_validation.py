@@ -26,6 +26,7 @@ def save_fig(name):
     print(f"  saved -> figures/{name}")
 
 """LOAD DATA"""
+
 print("Loading dataset...")
 path = kagglehub.dataset_download("arunavakrchakraborty/financial-payment-services-fraud-data")
 csv_files = [f for f in os.listdir(path) if f.endswith('.csv')]
@@ -83,10 +84,7 @@ scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test) #not fit
 
-""" TRAIN XGBOOST ON TEMPORAL TRAINING PARTITION 
-- identical to phase 3 
-method - keep hyperparameters fixed, tuning hyperparameters on the temporal tests would be optimising for the future not possible in deployment
-hyperparameters in phase 3 are locked and move forward the same"""
+""" TRAIN XGBOOST ON TEMPORAL TRAINING PARTITION """
 
 neg = (y_train == 0).sum()
 pos = (y_train == 1).sum()
@@ -110,7 +108,6 @@ model = xgb.XGBClassifier(
 )
 
 # validation is set for early stopping from only the training partition 
-#method - this is set to determine when to stop training. taken from the training partition
 # steps 1-600 (no future info) -> not in the test set
 X_tr, X_val, y_tr, y_val = train_test_split(
     X_train_scaled, y_train,
@@ -162,7 +159,7 @@ print("=" * 55)
 
 #load phase 3 random split metrics for comparison
 phase3 = pd.read_csv(xgb_metrics_path).iloc[0]
-print("\n COMPARISON: Random SPlit (Phase 3) vs Temporal Split (Phase 4)")
+print("\n COMPARISON: Random Split (Phase 3) vs Temporal Split (Phase 4)")
 print(f" {'Metric':<12} {'Phase 3': >10} {'Phase 4':>10} {'Delta': 10}")
 print(f" {'-'*44}")
 
@@ -187,6 +184,7 @@ fig.suptitle("Figure 17 - Temporal Validation: Confusion Matrix",
 fontsize=13, fontweight="bold")
 
 cm_pct = cm.astype(float) / cm.sum(axis=1, keepdims=True) * 100
+
 for ax, data, fmt, title in zip(
     axes,
     [cm, cm_pct],
@@ -210,12 +208,20 @@ save_fig("fig17_confusion_matrix_temporal.png")
 shows if fraud patterns are the same across time."""
 
 step_fraud = df_filtered.groupby("step")["isFraud"].mean() * 100
+y_max = step_fraud.max() * 1.2
+step_max = int(df_filtered["step"].max())
 
 plt.figure(figsize=(12, 5))
 plt.plot(step_fraud.index, step_fraud.values, color="#D65F5F", lw=1.5, alpha=0.8)
 plt.axvline(x=SPLIT_STEP, color="black", linestyle="--", lw=2, label=f"Train/test split (step {SPLIT_STEP})")
-plt.fill_betweenx([0, step_fraud.max() * 1.2],
-                  0, SPLIT_STEP, alpha=0.07, color="#4878CF", label="Training region")
+#plt.fill_betweenx([0, step_fraud.max() * 1.2],
+   #               0, SPLIT_STEP, alpha=0.07, color="#4878CF", label="Training region")
+
+#training region shading
+plt.fill_betweenx([0, y_max], 0, SPLIT_STEP, alpha=0.07, color="#4878CF", label="Training region")
+#test region
+plt.fill_betweenx([0, y_max], SPLIT_STEP, step_max, alpha=0.07, color="#D65F5F", label="Test region")
+
 plt.xlabel("Time Step")
 plt.ylabel("Fraud Rate (%)")
 plt.title("Figure 18 - Fraud Rate Across Time Steps \n"
@@ -229,9 +235,9 @@ save_fig("fig18_fraud_rate_over_time.png")
 fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
 
 plt.figure(figsize=(8,6))
-plt.plot(fpr, tpr, color="#D65F5F", lw=2, label=f"Temporal SPlit (AUC = {roc_auc:.4f})")
+plt.plot(fpr, tpr, color="#D65F5F", lw=2, label=f"Temporal Split (AUC = {roc_auc:.4f})")
 
-phase3_auc = phase3["roc_auc"] if "roc_auc" in phase3 else None
+phase3_auc = phase3["roc_auc"] if "roc_auc" in phase3.index else None
 if phase3_auc:
     plt.plot([], [], color="#4878CF", lw=2,
     label=f"Random Split - Phase 3 (AUC = {phase3_auc:.4f})")
@@ -249,9 +255,9 @@ precision_vals, recall_vals, _ = precision_recall_curve(y_test, y_pred_prob)
 
 plt.figure(figsize=(8,6))
 plt.plot(recall_vals, precision_vals, color="#D65F5F", lw=2,
-         label=f"Temporal SPlit (AP = {avg_prc:.4f})")
+         label=f"Temporal Split (AP = {avg_prc:.4f})")
 
-phase3_prauc = phase3["pr_auc"] if "pr_auc" in phase3 else None
+phase3_prauc = phase3["pr_auc"] if "pr_auc" in phase3.index else None
 if phase3_prauc:
     plt.plot([], [], color="#4878CF", lw=2,
     label=f"Random Split - Phase 3 (AP = {phase3_prauc:.4f})")
