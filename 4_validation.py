@@ -271,6 +271,58 @@ plt.legend(loc="upper right")
 plt.tight_layout()
 save_fig("fig20_pr_temporal_vs_random.png")
 
+"""FIGURE 21 - False Positive Analysis: Temporal Test Set"""
+# for direct comprison between phase 3 and 4 between the positive behaviour on random vs temporal
+
+test_analysis_df = X_test.copy()
+test_analysis_df["y_true"] = y_test.values
+test_analysis_df["y_pred"] = y_pred_tuned
+test_analysis_df["fraud_prob"] = y_pred_prob
+
+false_positives = test_analysis_df[(test_analysis_df["y_true"] == 0) & (test_analysis_df["y_pred"] == 1)]
+true_negatives = test_analysis_df[((test_analysis_df["y_true"] == 0) & (test_analysis_df["y_pred"] == 0))]
+
+n_legit = (test_analysis_df["y_true"] == 0).sum() #calc
+print(f"\ False positives (temporal): {len(false_positives):,}"
+      f"({len(false_positives)/n_legit*100:.2f}% of legit transactions)")
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+fig.suptitle("Figure 21 - False Positive Analysis: Temporal Set", fontsize=12, fontweight="bold")
+
+cap = test_analysis_df["amount"].quantile(0.99)
+
+axes[0].hist(
+    np.log1p(true_negatives[true_negatives["amount"] <= cap]["amount"]), bins=60, alpha=0.6, color="#4878CF", density=True, label="True Negatives"
+)
+
+axes[0].hist(
+    np.log1p(false_positives[false_positives["amount"] <= cap]["amount"]), bins=60, alpha=0.6, colot="#D65F5F", densitu=True, label="False Positives"
+)
+axes[0].set_title("Amount Distribution: False Positives vs True Negatives \n (temporal test set)")
+axes[0].set_xlabel("log(Amount + 1)")
+axes[0].set_ylabel("Density")
+axes[0].legend()
+
+#fp spread at high probabilities = confident errors = very bad
+axes[1].hist(false_positives["fraud_prob"], bins=40, color="#D65F5F", edgecolor="white")
+axes[1].axline(x=locked_threshold, color="black", linestyle="--", label=f"Threshold ({locked_threshold:.2f})")
+axes[1].set_xlabel("Predicted Fraud Probability")
+axes[1].set_ylabel("Count")
+axes[1].legend()
+
+plt.tight_layout()
+save_fig("fig21_false_positive_temporal.png")
+
+"""FIGURES 22 & 23 - Concept Drift Analysis"""
+#using only the rate of fraud is weak (fig18) bc it only shows if the fraud freq changes
+#stronger to test if statistical properties change over time
+
+df_filtered["time_bin"] = pd.cut(df_filtered["step"], bins=5)
+
+#layer 2 - amount drift
+
+#layer 4 - feature drift
+
 # save the metrics
 metrics = {
     "model": "XGBoost (Temporal Split)",
