@@ -320,8 +320,77 @@ save_fig("fig21_false_positive_temporal.png")
 df_filtered["time_bin"] = pd.cut(df_filtered["step"], bins=5)
 
 #layer 2 - amount drift
+amount_drift = (
+    df_filtered.groupby(["time_bin", "isFraud"], observed=True)["amount"].mean().unstack().rename(columns={0: "Legitimate", 1:"Fraudulent"})
+)
 
-#layer 4 - feature drift
+#layer 3 - feature level drift
+drain_drift = (
+    df_filtered[df_filtered["isFraud"] == 1].groupby("time_bin", observed=True)["orig_drained"].mean() *100
+)
+
+# if the ratio of transfer to cash_out frauc changes then the type_endoded becomes less reliable later
+type_drift = ( 
+    df_filtered[df_filtered["isFraud"] == 1].groupby("time_bin", observed=True)["type_encoded"].mean() * 100
+)
+
+print("\n CONCEPT DRIFT ANALYSIS")
+print("Mean transaction amount by time bin: ")
+print(amount_drift.to_string())
+print(f"\n orig_drained rate across time bins (% of fraud): ")
+print(drain_drift.to_string())
+print(f"\n TRANSFER fraud rate across time bins (% of fraud that is TRANSFER): ")
+print(type_drift.to_string())
+
+bin_labels = [f"Bin {i+1}" for i in range(len(amount_drift))]
+
+#fig 22 - amount drift
+fig, axes = plt.subplots(1,2, figsize=(14,5))
+fig.suptitle("Figure 22 - Concept Drift: Transaction Amount Across Time Bins", fontsize=13, fontweight="bold")
+
+axes[0].plot(bin_labels, amount_drift["Legitimate"], marker="o", color="#4878CF", lw=2, label="Legitimate")
+axes[0].plot(bin_labels, amount_drift["Fraudulent"], marker="o", color="#D65F5F", lw=2, label="Fraudulent")
+axes[0].axvline(x="Bin 4", color="black", linestyle="--", lw=1.5, label="Train/test boundary (~Bin 4)")
+axes[0].set_title("Mean Transaction Amount by Time Bin")
+axes[0].set_xlabel("Time Bin (chronological)")
+axes[0].set_ylabel("Mean Amount ($)")
+axes[0].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+axes[0].legend()
+
+axes[1].plot(bin_labels, drain_drift.values, marker="s", color="#D65F5F", lw=2, label="orig_drained rate (%)")
+axes[1].plot(bin_labels, type_drift.values, marker="^", color="#4878CF", lw=2, label="TRANSFER fraud rate (%)")
+axes[1].axvline(x="Bin 4", color="black", linestyle="--", lw=1.5, label="Train/test boundary (~Bin 4)")
+axes[1].set_title("feature-Level Drift: Key fraud Signals Across Time")
+axes[1].set_xlabel("Time Bin (chronological)")
+axes[1].set_ylabel("Rate (%)")
+axes[1].legend()
+
+plt.tight_layout()
+save_fig("fig22_concept_drift_amount.png")
+
+#fig 23 - fraud type drift across the bins
+#shows which part of the model decreases in quality first
+fraud_type_counts = (
+    df_filtered[df_filtered["isFraud"] == 1].groupby(["time_bin", "type"], observed=True).size().unstack(fill_value=0)
+)
+
+if "TRANSFER" in fraud_type_counts.columns and "CASH_OUT" in fraud_type_counts.columns:
+    fraud_type_pct = fraud_type_counts.div(fraud_type_counts.sum(axis=1), axis=0) * 100
+
+    plt.figure(figsize=(10,5))
+    plt.plot(bin_labels, fraud_type_pct["TRANSFER"].values, marker="o", color="#4878CF", lw=2, label="TRANSFER fraud (%)")
+    plt.plot(bin_labels, fraud_type_pct["CASH_OUT"].values, marker="s", color="#D65F5F", lw=2, label="CASH_OUT fraud (%)")
+    plt.axvline(x="Bin 4", color="black", linestyle="--", lw=1.5, label="Train/test boundary (~Bin 4)")
+    plt.xlabel("Time Bin (chronological)")
+    plt.ylabel("(%) of Fraud Transactions")
+    plt.title("Figure 23 - Fraud Type COmposition Across Time\n"
+              "(shifts indicate feature level concept drift)")
+    plt.legend()
+    plt.tight_layout()
+    save_fig("fig23_fraud_type_drift.png")
+
+#clean the temp bin column
+df_filtered.drop(column=["time_bin"], inplace=True)
 
 # save the metrics
 metrics = {
