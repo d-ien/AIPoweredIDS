@@ -160,7 +160,7 @@ print("=" * 55)
 #load phase 3 random split metrics for comparison
 phase3 = pd.read_csv(xgb_metrics_path).iloc[0]
 print("\n COMPARISON: Random Split (Phase 3) vs Temporal Split (Phase 4)")
-print(f" {'Metric':<12} {'Phase 3': >10} {'Phase 4':>10} {'Delta': 10}")
+print(f" {'Metric':<12} {'Phase 3':>10} {'Phase 4':>10} {'Delta':10}")
 print(f" {'-'*44}")
 
 for metric, val in [("Precision", prec), ("Recall", rec),
@@ -283,7 +283,7 @@ false_positives = test_analysis_df[(test_analysis_df["y_true"] == 0) & (test_ana
 true_negatives = test_analysis_df[((test_analysis_df["y_true"] == 0) & (test_analysis_df["y_pred"] == 0))]
 
 n_legit = (test_analysis_df["y_true"] == 0).sum() #calc
-print(f"\ False positives (temporal): {len(false_positives):,}"
+print(f"\n False positives (temporal): {len(false_positives):,}"
       f"({len(false_positives)/n_legit*100:.2f}% of legit transactions)")
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -291,13 +291,30 @@ fig.suptitle("Figure 21 - False Positive Analysis: Temporal Set", fontsize=12, f
 
 cap = test_analysis_df["amount"].quantile(0.99)
 
-axes[0].hist(
-    np.log1p(true_negatives[true_negatives["amount"] <= cap]["amount"]), bins=60, alpha=0.6, color="#4878CF", density=True, label="True Negatives"
-)
+tn_amounts = true_negatives[true_negatives["amount"] <= cap]["amount"]
+fp_amounts = false_positives[false_positives["amount"] <= cap]["amount"]
 
-axes[0].hist(
-    np.log1p(false_positives[false_positives["amount"] <= cap]["amount"]), bins=60, alpha=0.6, colot="#D65F5F", densitu=True, label="False Positives"
-)
+#when it runs it says only 15 false positives so the original subset might be too small to show anything meaningful
+#log output
+print(f" True negatives for the plot: {len(tn_amounts):,}")
+print(f" False positives for the plot: {len(fp_amounts):,}")
+
+if len(tn_amounts) > 0:
+    axes[0].hist(
+        np.log1p(tn_amounts), bins=60, alpha=0.6, color="#4878CF", density=True, label="True Negatives"
+    )
+
+if len(fp_amounts) > 0:
+    axes[0].hist(
+        np.log1p(fp_amounts), bins=60, alpha=0.6, color="#D65F5F", density=True, label="False Positives"
+    )
+
+elif len(fp_amounts) == 0:
+    axes[0].text(
+        0.5, 0.5, f"Only {len(false_positives)} false positives in total \n"
+        "not efficient for distribution plot", ha="center", va="center", transform=axes[0].transAxes, fontsize=11, color="#D65F5F"
+    )
+
 axes[0].set_title("Amount Distribution: False Positives vs True Negatives \n (temporal test set)")
 axes[0].set_xlabel("log(Amount + 1)")
 axes[0].set_ylabel("Density")
@@ -305,7 +322,7 @@ axes[0].legend()
 
 #fp spread at high probabilities = confident errors = very bad
 axes[1].hist(false_positives["fraud_prob"], bins=40, color="#D65F5F", edgecolor="white")
-axes[1].axline(x=locked_threshold, color="black", linestyle="--", label=f"Threshold ({locked_threshold:.2f})")
+axes[1].axvline(x=locked_threshold, color="black", linestyle="--", label=f"Threshold ({locked_threshold:.2f})")
 axes[1].set_xlabel("Predicted Fraud Probability")
 axes[1].set_ylabel("Count")
 axes[1].legend()
@@ -390,7 +407,7 @@ if "TRANSFER" in fraud_type_counts.columns and "CASH_OUT" in fraud_type_counts.c
     save_fig("fig23_fraud_type_drift.png")
 
 #clean the temp bin column
-df_filtered.drop(column=["time_bin"], inplace=True)
+df_filtered.drop(columns=["time_bin"], inplace=True)
 
 # save the metrics
 metrics = {
@@ -408,4 +425,3 @@ metrics = {
 pd.DataFrame([metrics]).to_csv("metrics/xgboost_temporal.csv", index=False)
 print(f"\n Metrics saved -> metrics/xgboost_temporal.csv")
 print(f"\nAll Phase 4 figures saved to /figures")
-print(f"Paste the comparison table output here before writing your robustness section.")
