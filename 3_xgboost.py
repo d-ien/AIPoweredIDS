@@ -27,7 +27,7 @@ def save_fig(name):
 """ 1- LOAD AND PREPROCESSING
 - same pipeline as the baseline.py
 - using the same preprocessing ensures that any diffrence in performance between the logistic regression and XGBoost is because of the MODEL and not using
-a different way of data preparation. - add to methodology "to ensure a fair comparison, identical preprocessing was applied across all model."?
+a different way of data preparation
 """
 print("Loading dataset...")
 path = kagglehub.dataset_download("arunavakrchakraborty/financial-payment-services-fraud-data")
